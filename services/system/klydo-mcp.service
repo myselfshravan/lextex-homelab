@@ -1,0 +1,23 @@
+[Unit]
+Description=Klydo MCP Server (HTTP Transport)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME
+Environment="KLYDO_DEFAULT_SCRAPER=klydo"
+Environment="KLYDO_REQUEST_TIMEOUT=30"
+Environment="KLYDO_CACHE_TTL=3600"
+Environment="KLYDO_REQUESTS_PER_MINUTE=30"
+Environment="KLYDO_DEBUG=true"
+ExecStart=/usr/bin/python3 /home/YOUR_USERNAME/klydo-mcp-http.py
+Restart=always
+RestartSec=10
+TimeoutStartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

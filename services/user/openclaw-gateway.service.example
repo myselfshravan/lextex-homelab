@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenClaw Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/node /home/YOUR_USERNAME/.npm-global/lib/node_modules/openclaw/dist/index.js gateway --port 18789
+Restart=always
+RestartSec=5
+KillMode=process
+Environment="OPENCLAW_GATEWAY_PORT=18789"
+Environment="OPENCLAW_GATEWAY_TOKEN=your_token_here"
+
+[Install]
+WantedBy=default.target
