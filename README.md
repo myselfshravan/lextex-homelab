@@ -6,6 +6,8 @@
 [![Health](https://img.shields.io/badge/Health-All%20Systems%20Go-brightgreen)](https://health.droidvm.dev)
 [![AI](https://img.shields.io/badge/AI-OpenClaw-blue)](https://openclaw.droidvm.dev)
 [![Access](https://img.shields.io/badge/Access-Tailscale%20%7C%20Cloudflare-informational)](https://health.droidvm.dev)
+[![WSL](https://img.shields.io/badge/Platform-WSL2-2496ED)](https://learn.microsoft.com/en-us/windows/wsl/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
@@ -21,45 +23,55 @@ This is **not your average home server**. It's a WSL2-based AI orchestration pla
 
 ---
 
-## Architecture
+## Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Windows 11                             │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │              WSL2 (Ubuntu 24.04.3 LTS)                │  │
-│  │  ┌─────────────────────────────────────────────────┐  │  │
-│  │  │   systemd (system + user)                       │  │  │
-│  │  │                                                  │  │  │
-│  │  │   ┌────────────┐  ┌────────────┐  ┌──────────┐ │  │  │
-│  │  │   │ OpenClaw   │  │ Health API │  │   Klydo  │ │  │  │
-│  │  │   │ Gateway    │  │            │  │   MCP    │ │  │  │
-│  │  │   │  (18789)   │  │  (8080)    │  │  (8000)  │ │  │  │
-│  │  │   └────────────┘  └────────────┘  └──────────┘ │  │  │
-│  │  │                                                  │  │  │
-│  │  │   ┌────────────┐  ┌────────────┐                │  │  │
-│  │  │   │  SSH       │  │ Tailscale  │                │  │  │
-│  │  │   │  (22)      │  │            │                │  │  │
-│  │  │   └────────────┘  └────────────┘                │  │  │
-│  │  └─────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │   Task Scheduler: WSL2 Auto-Start (30s delay)         │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                             │
-              ┌──────────────┴──────────────┐
-              │                             │
-        ┌─────▼─────┐                 ┌─────▼─────┐
-        │ Tailscale │                 │ Cloudflare│
-        │   VPN     │                 │  Tunnel   │
-        │ (Private) │                 │ (Public)  │
-        └───────────┘                 └───────────┘
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        Browser[Web Browser]
+        Terminal[SSH Client]
+    end
+
+    subgraph "Access Layer"
+        CF[Cloudflare Tunnel]
+        TS[Tailscale VPN]
+    end
+
+    subgraph "Windows 11 Host"
+        Task[Task Scheduler]
+        WSL[WSL2 Ubuntu 24.04.3 LTS]
+    end
+
+    subgraph "Services Layer"
+        OC[OpenClaw Gateway :18789]
+        HS[Health API :8080]
+        SSH[SSH Server :22]
+        KM[Klydo MCP :8000]
+    end
+
+    Browser -->|Public HTTPS| CF
+    Terminal -->|SSH| CF
+    Browser -->|Private HTTP| TS
+    Terminal -->|SSH| TS
+
+    CF --> WSL
+    TS --> WSL
+
+    Task -->|30s Delay| WSL
+    WSL --> OC
+    WSL --> HS
+    WSL --> SSH
+    WSL --> KM
+
+    style CF fill:#f6821f,color:#fff
+    style TS fill:#4a90e2,color:#fff
+    style OC fill:#6900cc,color:#fff
+    style HS fill:#32cd32,color:#fff
 ```
 
 ---
 
-## The Stack
+## Service Stack
 
 | Component | What | How |
 |-----------|------|-----|
@@ -82,6 +94,68 @@ This is **not your average home server**. It's a WSL2-based AI orchestration pla
 | **SSH Server** | 22 | [ssh.droidvm.dev](ssh://ssh.droidvm.dev) | Remote shell |
 | **Klydo MCP** | 8000 | [klydo-mcp.droidvm.dev](https://klydo-mcp.droidvm.dev) | Fashion search |
 | **Tailscale** | 41641 | `asus-vivobooks15-1` | Private VPN |
+
+---
+
+## Auto-Start Chain
+
+```mermaid
+flowchart TD
+    A[Windows Boot] -->|30s Delay| B[Task Scheduler<br/>wsl.exe]
+    B --> C[WSL2 Starts]
+    C --> D[systemd System Services]
+    C --> E[systemd User Services]
+
+    D --> D1[ssh]
+    D --> D2[tailscaled]
+    D --> D3[cloudflared<br/>waits for user@1000]
+    D --> D4[health-server<br/>waits for openclaw]
+
+    E --> E1[openclaw-gateway<br/>enabled via linger]
+    E --> E2[klydo-mcp]
+
+    D3 -.->|Dependency| E1
+    D4 -.->|Dependency| E1
+
+    style A fill:#0078d4,color:#fff
+    style D1 fill:#32cd32,color:#fff
+    style D2 fill:#4a90e2,color:#fff
+    style D3 fill:#f6821f,color:#fff
+    style D4 fill:#ff6b6b,color:#fff
+    style E1 fill:#6900cc,color:#fff
+```
+
+---
+
+## Dual Access Layer
+
+```mermaid
+graph LR
+    subgraph "Public Access"
+        CF[Cloudflare Tunnel]
+    end
+
+    subgraph "Private Access"
+        TS[Tailscale VPN]
+    end
+
+    subgraph "Server"
+        SRV[WSL2 Services]
+    end
+
+    User[You] -->|From Anywhere| CF
+    User -->|From Your Devices| TS
+
+    CF --> SRV
+    TS --> SRV
+
+    style CF fill:#f6821f,color:#fff
+    style TS fill:#4a90e2,color:#fff
+    style SRV fill:#6900cc,color:#fff
+```
+
+**Tailscale** — Secure, keyless SSH within your tailnet
+**Cloudflare** — Public access from anywhere in the world
 
 ---
 
@@ -177,28 +251,7 @@ Running a full server stack on WSL2 is unconventional, but it works beautifully:
 - **Linux power** — Full systemd, containers, native tooling
 - **Resource flexibility** — Adjustable RAM/CPU via `.wslconfig`
 
-### 2. Dual Access Layer
-```
-        ┌─────────────────────────────────────┐
-        │                                     │
-   ┌────▼────┐                          ┌────▼────┐
-   │ Tailscale│                          │Cloudflare│
-   │   VPN    │                          │  Tunnel  │
-   │(Private) │                          │ (Public) │
-   └────┬────┘                          └────┬────┘
-        │                                    │
-        └──────────────┬─────────────────────┘
-                       │
-                ┌──────▼──────┐
-                │   The Server │
-                │   (WSL2)     │
-                └─────────────┘
-```
-
-- **Tailscale** — Secure, keyless SSH within your tailnet
-- **Cloudflare** — Public access from anywhere in the world
-
-### 3. Health-First Design
+### 2. Health-First Design
 Every service is monitored:
 - **Passive checks** — Is the process running?
 - **Active checks** — Can we reach the HTTP endpoint?
@@ -206,31 +259,7 @@ Every service is monitored:
 
 The health API even validates **external connectivity** by checking DNS servers.
 
-### 4. Auto-Start Chain
-```
-Windows Boot
-    ↓ (30s delay)
-Task Scheduler: wsl.exe
-    ↓
-WSL2 starts
-    ↓
-systemd (system + user)
-    ↓
-┌─────────────┬─────────────┐
-│ System Services           │
-│ ├─ ssh                    │
-│ ├─ tailscaled             │
-│ ├─ cloudflared (waits for user@1000) │
-│ └─ health-server (waits for openclaw) │
-└─────────────┴─────────────┘
-    ↓
-User Services (via loginctl enable-linger)
-    ↓
-├─ openclaw-gateway
-└─ other user services
-```
-
-### 5. Claude Code Integration
+### 3. Claude Code Integration
 Development is AI-assisted:
 ```bash
 # Claude Code runs natively in WSL2
@@ -281,18 +310,18 @@ Want to set this up yourself? See the **[Complete Setup Guide](./system-setup-gu
 ## Project Structure
 
 ```
-~/lextex-docs/
+lextex-homelab/
 ├── README.md                    # This file
-└── system-setup-guide.md       # Complete technical guide
-
-/home/lextex/
+├── system-setup-guide.md        # Complete technical guide
 ├── health_server.py             # Health monitoring API
 ├── klydo-mcp-http.py            # Klydo MCP HTTP wrapper
-├── .config/systemd/user/
-│   └── openclaw-gateway.service # User-level AI agent service
-└── .openclaw/                   # OpenClaw configuration
-    ├── openclaw.json
-    └── skills/                  # Custom AI skills
+├── services/
+│   ├── openclaw-gateway.service.example
+│   ├── health-server.service.example
+│   └── klydo-mcp.service.example
+└── examples/
+    ├── wslconfig.example        # WSL2 resource configuration
+    └── cloudflare-config.example
 ```
 
 ---
@@ -308,21 +337,26 @@ Want to set this up yourself? See the **[Complete Setup Guide](./system-setup-gu
 
 ---
 
+## Contributing
+
+Found a bug or have a feature idea? Feel free to open an issue or submit a PR!
+
+---
+
 ## License
 
-This setup is personal infrastructure. Do what you want with it.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## Acknowledgments
 
-- **OpenClaw** — The AI agent framework
-- **Tailscale** — The mesh network that just works
-- **Cloudflare** — The tunnel that makes public access trivial
-- **WSL2** — For making Linux-on-Windows actually usable
+- **[OpenClaw](https://github.com/openclaw-org/openclaw)** — The AI agent framework
+- **[Tailscale](https://tailscale.com/)** — The mesh network that just works
+- **[Cloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/)** — The tunnel that makes public access trivial
+- **[WSL2](https://learn.microsoft.com/en-us/windows/wsl/)** — For making Linux-on-Windows actually usable
+- **[Claude Code](https://claude.ai/code)** — AI-powered development CLI
 
 ---
 
 **Built with ❤️ and too much caffeine**
-
-_Last updated: March 1, 2026_
