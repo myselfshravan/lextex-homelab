@@ -19,11 +19,10 @@ _Last Updated: March 1, 2026_
 5. [Cloudflare Tunnel Setup](#cloudflare-tunnel-setup)
 6. [SSH Access](#ssh-access)
 7. [OpenClaw AI Agent](#openclaw-ai-agent)
-8. [Klydo MCP Server](#klydo-mcp-server)
-9. [Health Monitoring](#health-monitoring)
-10. [Remote Access Comparison](#remote-access-comparison)
-11. [Troubleshooting](#troubleshooting)
-12. [Migration Guide](#migration-guide)
+8. [Health Monitoring](#health-monitoring)
+9. [Remote Access Comparison](#remote-access-comparison)
+10. [Troubleshooting](#troubleshooting)
+11. [Migration Guide](#migration-guide)
 
 ---
 
@@ -318,8 +317,6 @@ ingress:
     service: http://localhost:8080
   - hostname: openclaw.droidvm.dev
     service: http://localhost:18789
-  - hostname: klydo-mcp.droidvm.dev
-    service: http://localhost:8000
   - service: http_status:404  # Catch-all
 ```
 
@@ -336,7 +333,6 @@ sudo chmod 600 /etc/cloudflared/YOUR_TUNNEL_ID.json
 cloudflared tunnel route dns droidvm-tunnel ssh.droidvm.dev
 cloudflared tunnel route dns droidvm-tunnel health.droidvm.dev
 cloudflared tunnel route dns droidvm-tunnel openclaw.droidvm.dev
-cloudflared tunnel route dns droidvm-tunnel klydo-mcp.droidvm.dev
 ```
 
 **Install as system service**:
@@ -770,97 +766,6 @@ This allows user systemd services to run even when the user is not logged in.
 
 ---
 
-#### 2. Klydo MCP Server
-
-**Install klydo-mcp**:
-
-```bash
-pip install --user klydo-mcp
-```
-
-**Create HTTP wrapper script** `~/klydo-mcp-http.py`:
-
-```bash
-cat > ~/klydo-mcp-http.py << 'MCP_EOF'
-#!/usr/bin/env python3
-"""HTTP wrapper for klydo-mcp server."""
-import sys
-import os
-
-# Add site-packages to path
-sys.path.insert(0, '/home/lextex/.local/lib/python3.12/site-packages')
-
-# Load API token from secure file
-with open('/home/lextex/.klydo-mcp-token', 'r') as f:
-    token = f.read().strip()
-os.environ['KLYDO_KLYDO_API_TOKEN'] = token
-
-# Set other environment variables
-os.environ.update({
-    'KLYDO_DEFAULT_SCRAPER': 'klydo',
-    'KLYDO_REQUEST_TIMEOUT': '30',
-    'KLYDO_CACHE_TTL': '3600',
-    'KLYDO_REQUESTS_PER_MINUTE': '30',
-    'KLYDO_DEBUG': 'true',
-})
-
-# Import and run with HTTP transport
-from klydo.server import mcp
-
-if __name__ == '__main__':
-    mcp.run(transport="streamable-http", host="127.0.0.1", port=8000)
-MCP_EOF
-
-chmod +x ~/klydo-mcp-http.py
-```
-
-**Create API token file**:
-
-```bash
-echo "your_klydo_api_token_here" > ~/.klydo-mcp-token
-chmod 600 ~/.klydo-mcp-token
-```
-
-**Create systemd service** `/etc/systemd/system/klydo-mcp.service`:
-
-```bash
-sudo bash -c 'cat > /etc/systemd/system/klydo-mcp.service << EOF
-[Unit]
-Description=Klydo MCP Server (HTTP Transport)
-After=network.target
-Wants=network.target
-
-[Service]
-Type=simple
-User=lextex
-WorkingDirectory=/home/lextex
-Environment="KLYDO_DEFAULT_SCRAPER=klydo"
-Environment="KLYDO_REQUEST_TIMEOUT=30"
-Environment="KLYDO_CACHE_TTL=3600"
-Environment="KLYDO_REQUESTS_PER_MINUTE=30"
-Environment="KLYDO_DEBUG=true"
-ExecStart=/usr/bin/python3 /home/lextex/klydo-mcp-http.py
-Restart=always
-RestartSec=10
-TimeoutStartSec=30
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-EOF'
-```
-
-**Enable and start**:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable klydo-mcp
-sudo systemctl start klydo-mcp
-```
-
----
-
 ### Auto-Start Configuration
 
 #### Service Dependency Chain
@@ -943,7 +848,6 @@ curl http://localhost:8080/health | jq .overall_healthy
 | Tailscale | System systemd | 41641 | VPN access |
 | Cloudflared | System systemd | - | Public tunnel access |
 | Health API | System systemd | 8080 (localhost) | System health monitoring |
-| Klydo MCP | System systemd | 8000 (localhost) | Fashion product search |
 
 ---
 
@@ -1069,7 +973,6 @@ The tunnel has 4 active connections to Cloudflare edge servers (Mumbai/Bangalore
 | `ssh.droidvm.dev` | SSH (port 22) | `ssh lextex@ssh.droidvm.dev` | Remote shell access |
 | `health.droidvm.dev` | Health API | https://health.droidvm.dev | System health monitoring |
 | `openclaw.droidvm.dev` | OpenClaw Dashboard | https://openclaw.droidvm.dev | AI agent control interface |
-| `klydo-mcp.droidvm.dev` | Klydo MCP Server | https://klydo-mcp.droidvm.dev/mcp | Fashion product search MCP |
 
 ### Ingress Rules
 
@@ -1081,8 +984,6 @@ ingress:
     service: http://localhost:8080
   - hostname: openclaw.droidvm.dev
     service: http://localhost:18789
-  - hostname: klydo-mcp.droidvm.dev
-    service: http://localhost:8000
   - hostname: www.droidvm.dev
     service: http_status:404
   - service: http_status:404  # Catch-all
@@ -1614,65 +1515,10 @@ This ASUS-VivoBookS15 has been configured as a robust home server running OpenCl
 | SSH | `ssh lextex@ssh.droidvm.dev` | Password auth enabled |
 | Health API | `https://health.droidvm.dev` | JSON health status |
 | OpenClaw Dashboard | `https://openclaw.droidvm.dev` | Token auth (Tailscale bypass) |
-| Klydo MCP Server | `https://klydo-mcp.droidvm.dev/mcp` | MCP protocol (HTTP transport) |
 
 **Recommended next steps**:
 1. Enable Tailscale SSH for seamless keyless access: `sudo tailscale up --ssh`
 2. Set up external monitoring to check `https://health.droidvm.dev` every 5 minutes
-
----
-
-## Klydo MCP Server
-
-The Klydo MCP (Model Context Protocol) server provides fashion product search and discovery capabilities.
-
-### Overview
-
-- **Package**: klydo-mcp v0.1.6
-- **Transport**: HTTP (streamable)
-- **Port**: 8000 (localhost only)
-- **Public URL**: https://klydo-mcp.droidvm.dev/mcp
-- **Service**: `klydo-mcp.service` (systemd)
-
-### Dual Mode Operation
-
-**Local (stdio)**: OpenClaw uses klydo-mcp via stdio transport for local access
-**Remote (HTTP)**: External clients access via https://klydo-mcp.droidvm.dev/mcp
-
-Both modes run simultaneously without conflicts.
-
-### Service Management
-
-```bash
-# Check status
-sudo systemctl status klydo-mcp
-
-# Restart service
-sudo systemctl restart klydo-mcp
-
-# View logs
-sudo journalctl -u klydo-mcp -n 50 --no-pager
-
-# Test locally
-curl -H "Accept: text/event-stream" http://localhost:8000/mcp
-
-# Test publicly
-curl -H "Accept: text/event-stream" https://klydo-mcp.droidvm.dev/mcp
-```
-
-### Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `~/klydo-mcp-http.py` | HTTP wrapper script |
-| `~/.klydo-mcp-token` | API token (secure, 600 permissions) |
-| `/etc/systemd/system/klydo-mcp.service` | systemd service file |
-
-### MCP Tools Available
-
-- `search_products`: Search for fashion products
-- `get_product_details`: Get detailed product information
-- `get_trending`: Get trending fashion items
 
 ---
 
@@ -1708,7 +1554,6 @@ cd ~/migration-backup
 # Export systemd service files
 cp /etc/systemd/system/cloudflared.service ./
 cp /etc/systemd/system/health-server.service ./
-cp /etc/systemd/system/klydo-mcp.service ./
 cp ~/.config/systemd/user/openclaw-gateway.service ./
 
 # Export configuration files
@@ -1722,10 +1567,6 @@ cp -r ~/.npm-global/lib/node_modules/openclaw ./openclaw-backup/
 
 # Export scripts
 cp ~/health_server.py ./
-cp ~/klydo-mcp-http.py ./
-
-# Export tokens (SECURE - store safely)
-cp ~/.klydo-mcp-token ./
 
 # Create package list
 pip list --user > pip-packages.txt
@@ -1761,7 +1602,6 @@ cd migration-backup
 # Restore systemd services
 sudo cp cloudflared.service /etc/systemd/system/
 sudo cp health-server.service /etc/systemd/system/
-sudo cp klydo-mcp.service /etc/systemd/system/
 mkdir -p ~/.config/systemd/user
 cp openclaw-gateway.service ~/.config/systemd/user/
 
@@ -1771,12 +1611,7 @@ sudo cp sshd_config /etc/ssh/
 
 # Restore scripts
 cp health_server.py ~/
-cp klydo-mcp-http.py ~/
-chmod +x ~/health_server.py ~/klydo-mcp-http.py
-
-# Restore tokens
-cp .klydo-mcp-token ~/
-chmod 600 ~/.klydo-mcp-token
+chmod +x ~/health_server.py
 ```
 
 #### 3. Restore Applications
@@ -1789,9 +1624,6 @@ npm install -g openclaw
 mkdir -p ~/.openclaw
 cp openclaw.json ~/.openclaw/
 cp -r openclaw-skills ~/.openclaw/skills
-
-# Reinstall Python packages
-pip install --user klydo-mcp
 ```
 
 #### 4. Restore Tailscale (Optional)
@@ -1842,8 +1674,8 @@ sudo systemctl daemon-reload
 sudo loginctl enable-linger lextex
 
 # Start system services
-sudo systemctl enable ssh cloudflared health-server klydo-mcp
-sudo systemctl start ssh cloudflared health-server klydo-mcp
+sudo systemctl enable ssh cloudflared health-server
+sudo systemctl start ssh cloudflared health-server
 
 # Start user services
 systemctl --user daemon-reload
@@ -1855,7 +1687,7 @@ systemctl --user start openclaw-gateway
 
 ```bash
 # Check all services
-systemctl status ssh tailscaled cloudflared health-server klydo-mcp
+systemctl status ssh tailscaled cloudflared health-server
 systemctl --user status openclaw-gateway
 
 # Test health endpoint
@@ -1875,7 +1707,6 @@ curl http://localhost:18789
 - [ ] Install and configure Cloudflared
 - [ ] Restore SSH configuration
 - [ ] Install OpenClaw and restore config
-- [ ] Install klydo-mcp and restore token
 - [ ] Restore health server script
 - [ ] Configure systemd services (system + user)
 - [ ] Enable `loginctl enable-linger`
@@ -1908,7 +1739,7 @@ free -h
 nproc
 
 # Check services
-systemctl status ssh tailscaled cloudflared health-server klydo-mcp
+systemctl status ssh tailscaled cloudflared health-server
 systemctl --user status openclaw-gateway
 
 # Check health

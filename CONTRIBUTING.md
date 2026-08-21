@@ -63,11 +63,11 @@ lextex-homelab/
 ├── README.md                    # Main overview
 ├── CONTRIBUTING.md              # This file
 ├── LICENSE                      # MIT License
+├── SECURITY.md                  # Security policy
 ├── system-setup-guide.md        # Technical implementation
 ├── health_server.py             # Health monitoring code
-├── klydo-mcp-http.py            # MCP HTTP wrapper
-├── services/                    # systemd service templates
-└── examples/                    # Configuration examples
+├── wsl.config.example           # WSL2 resource configuration
+└── services/                    # systemd service templates
 ```
 
 ## Questions?

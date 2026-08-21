@@ -74,7 +74,6 @@ graph TB
         OC[OpenClaw Gateway :18789]
         HS[Health API :8080]
         SSH[SSH Server :22]
-        KM[Klydo MCP :8000]
     end
 
     Browser -->|Public HTTPS| CF
@@ -89,7 +88,6 @@ graph TB
     WSL --> OC
     WSL --> HS
     WSL --> SSH
-    WSL --> KM
 
     style CF fill:#f6821f,color:#fff
     style TS fill:#4a90e2,color:#fff
@@ -119,7 +117,6 @@ graph TB
 |---------|------|--------|---------|
 | **OpenClaw Gateway** | 18789 | [openclaw.droidvm.dev](https://openclaw.droidvm.dev) | AI agent dashboard |
 | **Health API** | 8080 | [health.droidvm.dev](https://health.droidvm.dev) | System monitoring |
-| **Klydo MCP** | 8000 | [klydo-mcp.droidvm.dev](https://klydo-mcp.droidvm.dev) | Fashion search |
 | **SSH Server** | 22 | Tailscale only (private) | Secure remote shell |
 | **Tailscale VPN** | 41641 | `asus-vivobooks15-1` | Private network access |
 
@@ -140,7 +137,6 @@ flowchart TD
     D --> D4[health-server<br/>waits for openclaw]
 
     E --> E1[openclaw-gateway<br/>enabled via linger]
-    E --> E2[klydo-mcp]
 
     D3 -.->|Dependency| E1
     D4 -.->|Dependency| E1
@@ -349,16 +345,18 @@ Want to set this up yourself? See the **[Complete Setup Guide](./system-setup-gu
 ```
 lextex-homelab/
 ├── README.md                    # This file
+├── CONTRIBUTING.md              # Contribution guidelines
+├── SECURITY.md                  # Security policy
+├── LICENSE                      # MIT License
 ├── system-setup-guide.md        # Complete technical guide
 ├── health_server.py             # Health monitoring API
-├── klydo-mcp-http.py            # Klydo MCP HTTP wrapper
-├── services/
-│   ├── openclaw-gateway.service.example
-│   ├── health-server.service.example
-│   └── klydo-mcp.service.example
-└── examples/
-    ├── wslconfig.example        # WSL2 resource configuration
-    └── cloudflare-config.example
+├── wsl.config.example           # WSL2 resource configuration
+└── services/                    # systemd service templates
+    ├── system/
+    │   ├── cloudflared.service.example
+    │   └── health-server.service.example
+    └── user/
+        └── openclaw-gateway.service.example
 ```
 
 ---
